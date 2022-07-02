@@ -1,0 +1,11 @@
+# Visual Studio
+.vs
+
+# Visual Studio Code
+.vscode
+
+# IntelliJ
+.idea
+
+# libs
+libs/fbx
