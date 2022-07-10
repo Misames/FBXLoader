@@ -12,11 +12,18 @@
 #include "Vertex.h"
 #include "GLShader.h"
 
-std::vector<Vertex> m_vertices;
+using namespace std;
+using namespace fbxsdk;
+
+vector<Vertex> m_vertices;
 
 GLuint m_VAO;
 GLuint m_VBO;
-GLuint m_texId;
+
+// Texture
+GLuint m_textureId;
+int m_textureW, m_textureH;
+string filename;
 
 // Shader
 GLShader m_shader;
@@ -25,16 +32,18 @@ GLShader m_shader;
 FbxManager *m_fbxManager;
 FbxScene *m_scene;
 
+FbxMatrix finalGlobalTransform;
+
 void Initialize()
 {
     GLenum error = glewInit();
     if (error != GLEW_OK)
-        std::cout << "erreur d'initialisation de GLEW!" << std::endl;
+        cout << "erreur d'initialisation de GLEW!" << endl;
 
     // Logs
-    std::cout << "Version : " << glGetString(GL_VERSION) << std::endl;
-    std::cout << "Vendor : " << glGetString(GL_VENDOR) << std::endl;
-    std::cout << "Renderer : " << glGetString(GL_RENDERER) << std::endl;
+    cout << "Version : " << glGetString(GL_VERSION) << endl;
+    cout << "Vendor : " << glGetString(GL_VENDOR) << endl;
+    cout << "Renderer : " << glGetString(GL_RENDERER) << endl;
 
     // Shader
     m_shader.LoadVertexShader("vertex.glsl");
@@ -133,7 +142,7 @@ void Display(GLFWwindow *window)
         1.f, 0.f, 0.f, 0.f,
         0.f, 1.f, 0.f, 0.f,
         0.f, 0.f, 1.f, 0.f,
-        0.f, 0.f, -10.f, 1.f
+        0.f, 0.f, -15.f, 1.f
     };
     const GLint matTranslationLocation = glGetUniformLocation(m_shader.GetProgram(), "u_translation");
     glUniformMatrix4fv(matTranslationLocation, 1, false, translation);
@@ -156,13 +165,24 @@ void Display(GLFWwindow *window)
     const GLint matProjectionLocation = glGetUniformLocation(m_shader.GetProgram(), "u_projection");
     glUniformMatrix4fv(matProjectionLocation, 1, false, projectionPerspective);
 
+    auto test = finalGlobalTransform.Double44();
+    const float wesh[] = {
+    static_cast<float>(test[0][0]), static_cast<float>(test[0][1]),static_cast<float>(test[0][2]), static_cast<float>(test[0][3]),
+    static_cast<float>(test[1][0]), static_cast<float>(test[1][1]),static_cast<float>(test[1][2]), static_cast<float>(test[1][3]),
+    static_cast<float>(test[2][0]), static_cast<float>(test[2][1]),static_cast<float>(test[2][2]), static_cast<float>(test[2][3]),
+    static_cast<float>(test[3][0]), static_cast<float>(test[3][1]),static_cast<float>(test[3][2]), static_cast<float>(test[3][3])
+    };
+
+    const GLint loool = glGetUniformLocation(m_shader.GetProgram(), "u_test");
+    glUniformMatrix4fv(loool, 1, false, wesh);
+
     glBindVertexArray(m_VAO);
     glDrawArrays(GL_TRIANGLES, 0, m_vertices.size());
 }
 
 static void ErrorCallback(int error, const char *description)
 {
-    std::cout << "Error GFLW " << error << " : " << description << std::endl;
+    cout << "Error GFLW " << error << " : " << description << endl;
 }
 
 static void KeyCallback(GLFWwindow *window, int key, int scancode, int action, int mods)
@@ -200,6 +220,27 @@ void LoadFBX()
     }
 }
 
+void LoadTexture()
+{
+    uint8_t* data = stbi_load("data/ironman.fbm/ironman.dff.png", &m_textureW, &m_textureH, nullptr, STBI_rgb_alpha);
+
+    glGenTextures(1, &m_textureId);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_textureId);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    if (data)
+    {
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, m_textureW, m_textureH, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+        stbi_image_free(data);
+    }
+}
+
 // Parcours du Scene Graph
 static void ProcessNode(FbxNode *node, FbxNode *parent)
 {
@@ -209,20 +250,7 @@ static void ProcessNode(FbxNode *node, FbxNode *parent)
     switch (type)
     {
     case FbxNodeAttribute::eMesh:
-        // etape 1. calcul de la matrice geometrique
-        FbxVector4 translation = node->GetGeometricTranslation(FbxNode::eSourcePivot);
-        FbxVector4 rotation = node->GetGeometricRotation(FbxNode::eSourcePivot);
-        FbxVector4 scaling = node->GetGeometricScaling(FbxNode::eSourcePivot);
-        FbxAMatrix geometryTransform;
-        geometryTransform.SetTRS(translation, rotation, scaling);
-
-        // etape 2. on recupere la matrice global (world) du mesh
-        FbxAMatrix globalTransform = node->EvaluateGlobalTransform();
-
-        // etape 3. on concatene les deux matrices, ce qui donne la matrice world finale
-        auto finalGlobalTransform = globalTransform * geometryTransform;
-
-        // etape 4. on recupère les donnée du mesh
+        // on recupère les donnée du mesh
         Vertex myVertex = Vertex();
         FbxMesh *mesh = node->GetMesh();
         FbxVector4 *positions = mesh->GetControlPoints();
@@ -303,7 +331,7 @@ static void ProcessNode(FbxNode *node, FbxNode *parent)
 
 int main()
 {
-    GLFWwindow *window;
+    GLFWwindow* window;
 
     glfwSetErrorCallback(ErrorCallback);
 
@@ -321,11 +349,26 @@ int main()
     glfwSetKeyCallback(window, KeyCallback);
 
     LoadFBX();
-    FbxNode *root_node = m_scene->GetRootNode();
-    FbxNode *model = root_node->GetChild(0);
+    FbxNode* root_node = m_scene->GetRootNode();
+    FbxNode* model = root_node->GetChild(0);
     ProcessNode(model, root_node);
 
+    // etape 1. calcul de la matrice geometrique
+    FbxVector4 translation = model->GetGeometricTranslation(FbxNode::eSourcePivot);
+    FbxVector4 rotation = model->GetGeometricRotation(FbxNode::eSourcePivot);
+    FbxVector4 scaling = model->GetGeometricScaling(FbxNode::eSourcePivot);
+    FbxAMatrix geometryTransform;
+    geometryTransform.SetTRS(translation, rotation, scaling);
+
+    // etape 2. on recupere la matrice global (world) du mesh
+    FbxAMatrix globalTransform = model->EvaluateGlobalTransform();
+
+    // etape 3. on concatene les deux matrices, ce qui donne la matrice world finale
+    finalGlobalTransform = globalTransform * geometryTransform;
+
     Initialize();
+
+    LoadTexture();
 
     while (!glfwWindowShouldClose(window))
     {
