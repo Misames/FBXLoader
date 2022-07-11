@@ -1,11 +1,8 @@
 ﻿#define FBXSDK_SHARED
-
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
-
 #include <iostream>
 #include <vector>
-
 #include <fbxsdk.h>
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
@@ -16,14 +13,9 @@ using namespace std;
 using namespace fbxsdk;
 
 vector<Vertex> m_vertices;
-
+string pathTexture;
 GLuint m_VAO;
 GLuint m_VBO;
-
-// Texture
-GLuint m_textureId;
-int m_textureW, m_textureH;
-string pathText;
 
 // Shader
 GLShader m_shader;
@@ -123,13 +115,6 @@ void Display(GLFWwindow *window)
     // MATRICE DE ROTATION
     //
     const float rot[] = {
-        1.f, 0.f, 0.f, 0.f, // 1ere colonne
-        0.f, 1.f, 0.f, 0.f,
-        0.f, 0.f, 1.f, 0.f,
-        0.f, 0.f, 0.f, 1.f // 4eme colonne
-    };
-
-    const float rotY[] = {
         cosf(time), 0.f, -sinf(time), 0.f, // 1ere colonne
         0.f, 1.f, 0.f, 0.f,
         sinf(time), 0.f, cosf(time), 0.f,
@@ -160,12 +145,14 @@ void Display(GLFWwindow *window)
     constexpr float fov = 45.f;
     constexpr float fov_rad = fov * 3.141592654f / 180.f;
     const float f = 1.f / tanf(fov_rad / 2.f);
+    
     const float projectionPerspective[] = {
         f / aspectRatio, 0.f, 0.f, 0.f, // 1ere colonne
         0.f, f, 0.f, 0.f,
         0.f, 0.f, -(farZ + nearZ) / (farZ - nearZ), -1.f,
         0.f, 0.f, -(2.f * farZ * nearZ) / (farZ - nearZ), 0.f // 4eme colonne
     };
+
     const GLint matProjectionLocation = glGetUniformLocation(m_shader.GetProgram(), "u_projection");
     glUniformMatrix4fv(matProjectionLocation, 1, false, projectionPerspective);
 
@@ -196,27 +183,6 @@ static void KeyCallback(GLFWwindow *window, int key, int scancode, int action, i
         glfwSetWindowShouldClose(window, GLFW_TRUE);
 }
 
-void LoadTexture()
-{
-    uint8_t* data = stbi_load(pathText.c_str(), &m_textureW, &m_textureH, nullptr, STBI_rgb_alpha);
-
-    glGenTextures(1, &m_textureId);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_textureId);
-
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-    if (data)
-    {
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, m_textureW, m_textureH, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
-        glGenerateMipmap(GL_TEXTURE_2D);
-        stbi_image_free(data);
-    }
-}
-
 void GetMaterial(FbxNode *node)
 {
     int materialCount = node->GetMaterialCount();
@@ -243,7 +209,7 @@ void GetMaterial(FbxNode *node)
             const char* name = texture->GetName();
             const char* filename = texture->GetFileName();
             const char* relativeFilename = texture->GetRelativeFileName();
-            pathText = relativeFilename;
+            pathTexture = relativeFilename;
         }
     }
 }
@@ -268,7 +234,6 @@ static void ProcessNode(FbxNode *node, FbxNode *parent)
     switch (type)
     {
     case FbxNodeAttribute::eMesh:
-        // on recupère les donnée du mesh
         Vertex myVertex = Vertex();
         FbxMesh *mesh = node->GetMesh();
         FbxVector4 *positions = mesh->GetControlPoints();
@@ -370,7 +335,29 @@ int main()
     ProcessNode(model, root_node);
     GetWorldMat(model);
     GetMaterial(model);
-    LoadTexture();
+
+    // TEXTURE
+    unsigned int texture;
+    glGenTextures(1, &texture);
+    glBindTexture(GL_TEXTURE_2D, texture);
+
+    // définit les options de la texture actuellement liée
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    // charge et génère la texture
+    int width, height, nrChannels;
+    unsigned char* data = stbi_load(pathTexture.c_str(), &width, &height, &nrChannels, 0);
+
+    if (data)
+    {
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+    }
+
+    stbi_image_free(data);
 
     glGenVertexArrays(1, &m_VAO);
     glBindVertexArray(m_VAO);
