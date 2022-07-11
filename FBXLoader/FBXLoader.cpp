@@ -23,7 +23,7 @@ GLuint m_VBO;
 // Texture
 GLuint m_textureId;
 int m_textureW, m_textureH;
-string filename;
+string pathText;
 
 // Shader
 GLShader m_shader;
@@ -31,7 +31,6 @@ GLShader m_shader;
 // Scene FBX
 FbxManager *m_fbxManager;
 FbxScene *m_scene;
-
 FbxMatrix finalGlobalTransform;
 
 void Initialize()
@@ -49,31 +48,36 @@ void Initialize()
     m_shader.LoadVertexShader("vertex.glsl");
     m_shader.LoadFragmentShader("fragment.glsl");
     m_shader.Create();
+}
 
-    glGenVertexArrays(1, &m_VAO);
-    glBindVertexArray(m_VAO);
+void InitSceneFBX()
+{
+    // Init SDK
+    m_fbxManager = FbxManager::Create();
+    FbxIOSettings* ioSettings = FbxIOSettings::Create(m_fbxManager, IOSROOT);
+    m_fbxManager->SetIOSettings(ioSettings);
 
-    glGenBuffers(1, &m_VBO);
-    glBindBuffer(GL_ARRAY_BUFFER, m_VBO);
+    // Create scene
+    m_scene = FbxScene::Create(m_fbxManager, "Ma Scene");
+    FbxImporter* importer = FbxImporter::Create(m_fbxManager, "");
+    bool status = importer->Initialize("data/ironman.fbx", -1, m_fbxManager->GetIOSettings());
+    status = importer->Import(m_scene);
+    importer->Destroy();
 
-    constexpr int STRIDE = sizeof(Vertex);
-    glBufferData(GL_ARRAY_BUFFER, STRIDE * m_vertices.size(), m_vertices.data(), GL_STATIC_DRAW);
+    // On compare le repère de la scene avec le repere souhaite
+    FbxAxisSystem SceneAxisSystem = m_scene->GetGlobalSettings().GetAxisSystem();
+    FbxAxisSystem OurAxisSystem(FbxAxisSystem::eYAxis, FbxAxisSystem::eParityOdd, FbxAxisSystem::eRightHanded);
+    if (SceneAxisSystem != OurAxisSystem)
+        OurAxisSystem.ConvertScene(m_scene);
 
-    const int POSITION = glGetAttribLocation(m_shader.GetProgram(), "a_position");
-    glEnableVertexAttribArray(POSITION);
-    glVertexAttribPointer(POSITION, 3, GL_FLOAT, false, STRIDE, (void *)offsetof(Vertex, position));
+    FbxSystemUnit SceneSystemUnit = m_scene->GetGlobalSettings().GetSystemUnit();
 
-    const int NORMAL = glGetAttribLocation(m_shader.GetProgram(), "a_normal");
-    glEnableVertexAttribArray(NORMAL);
-    glVertexAttribPointer(NORMAL, 3, GL_FLOAT, false, STRIDE, (void *)offsetof(Vertex, normal));
-
-    const int UV = glGetAttribLocation(m_shader.GetProgram(), "a_texcoords");
-    glEnableVertexAttribArray(UV);
-    glVertexAttribPointer(UV, 2, GL_FLOAT, false, STRIDE, (void *)offsetof(Vertex, texcoords));
-
-    glBindVertexArray(0);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    // L'unite standard du Fbx est le centimetre, que l'on peut tester ainsi
+    if (SceneSystemUnit != FbxSystemUnit::cm)
+    {
+        printf("[warning] SystemUnity vaut %f cm!\n", SceneSystemUnit.GetScaleFactor());
+        FbxSystemUnit::cm.ConvertScene(m_scene);
+    }
 }
 
 void Shutdown()
@@ -133,7 +137,7 @@ void Display(GLFWwindow *window)
     };
 
     const GLint matRotLocation = glGetUniformLocation(m_shader.GetProgram(), "u_rotation");
-    glUniformMatrix4fv(matRotLocation, 1, false, rotY);
+    glUniformMatrix4fv(matRotLocation, 1, false, rot);
 
     //
     // MATRICE DE TRANSLATION
@@ -165,16 +169,17 @@ void Display(GLFWwindow *window)
     const GLint matProjectionLocation = glGetUniformLocation(m_shader.GetProgram(), "u_projection");
     glUniformMatrix4fv(matProjectionLocation, 1, false, projectionPerspective);
 
-    auto test = finalGlobalTransform.Double44();
-    const float wesh[] = {
-    static_cast<float>(test[0][0]), static_cast<float>(test[0][1]),static_cast<float>(test[0][2]), static_cast<float>(test[0][3]),
-    static_cast<float>(test[1][0]), static_cast<float>(test[1][1]),static_cast<float>(test[1][2]), static_cast<float>(test[1][3]),
-    static_cast<float>(test[2][0]), static_cast<float>(test[2][1]),static_cast<float>(test[2][2]), static_cast<float>(test[2][3]),
-    static_cast<float>(test[3][0]), static_cast<float>(test[3][1]),static_cast<float>(test[3][2]), static_cast<float>(test[3][3])
+    auto world = finalGlobalTransform.Double44();
+
+    const float worldMat[] = {
+    static_cast<float>(world[0][0]), static_cast<float>(world[0][1]),static_cast<float>(world[0][2]), static_cast<float>(world[0][3]),
+    static_cast<float>(world[1][0]), static_cast<float>(world[1][1]),static_cast<float>(world[1][2]), static_cast<float>(world[1][3]),
+    static_cast<float>(world[2][0]), static_cast<float>(world[2][1]),static_cast<float>(world[2][2]), static_cast<float>(world[2][3]),
+    static_cast<float>(world[3][0]), static_cast<float>(world[3][1]),static_cast<float>(world[3][2]), static_cast<float>(world[3][3])
     };
 
-    const GLint loool = glGetUniformLocation(m_shader.GetProgram(), "u_test");
-    glUniformMatrix4fv(loool, 1, false, wesh);
+    const GLint worldMatlocation = glGetUniformLocation(m_shader.GetProgram(), "u_world");
+    glUniformMatrix4fv(worldMatlocation, 1, false, worldMat);
 
     glBindVertexArray(m_VAO);
     glDrawArrays(GL_TRIANGLES, 0, m_vertices.size());
@@ -191,38 +196,9 @@ static void KeyCallback(GLFWwindow *window, int key, int scancode, int action, i
         glfwSetWindowShouldClose(window, GLFW_TRUE);
 }
 
-void LoadFBX()
-{
-    // Init SDK
-    m_fbxManager = FbxManager::Create();
-    FbxIOSettings *ioSettings = FbxIOSettings::Create(m_fbxManager, IOSROOT);
-    m_fbxManager->SetIOSettings(ioSettings);
-
-    // Create scene
-    m_scene = FbxScene::Create(m_fbxManager, "Ma Scene");
-    FbxImporter *importer = FbxImporter::Create(m_fbxManager, "");
-    bool status = importer->Initialize("data/ironman.fbx", -1, m_fbxManager->GetIOSettings());
-    status = importer->Import(m_scene);
-    importer->Destroy();
-
-    // On compare le repère de la scene avec le repere souhaite
-    FbxAxisSystem SceneAxisSystem = m_scene->GetGlobalSettings().GetAxisSystem();
-    FbxAxisSystem OurAxisSystem(FbxAxisSystem::eYAxis, FbxAxisSystem::eParityOdd, FbxAxisSystem::eRightHanded);
-    if (SceneAxisSystem != OurAxisSystem)
-        OurAxisSystem.ConvertScene(m_scene);
-
-    FbxSystemUnit SceneSystemUnit = m_scene->GetGlobalSettings().GetSystemUnit();
-    // L'unite standard du Fbx est le centimetre, que l'on peut tester ainsi
-    if (SceneSystemUnit != FbxSystemUnit::cm)
-    {
-        printf("[warning] SystemUnity vaut %f cm!\n", SceneSystemUnit.GetScaleFactor());
-        FbxSystemUnit::cm.ConvertScene(m_scene);
-    }
-}
-
 void LoadTexture()
 {
-    uint8_t* data = stbi_load("data/ironman.fbm/ironman.dff.png", &m_textureW, &m_textureH, nullptr, STBI_rgb_alpha);
+    uint8_t* data = stbi_load(pathText.c_str(), &m_textureW, &m_textureH, nullptr, STBI_rgb_alpha);
 
     glGenTextures(1, &m_textureId);
     glActiveTexture(GL_TEXTURE0);
@@ -239,6 +215,48 @@ void LoadTexture()
         glGenerateMipmap(GL_TEXTURE_2D);
         stbi_image_free(data);
     }
+}
+
+void GetMaterial(FbxNode *node)
+{
+    int materialCount = node->GetMaterialCount();
+    FbxSurfaceMaterial* material = node->GetMaterial(0);
+    const FbxProperty property = material->FindProperty(FbxSurfaceMaterial::sDiffuse);
+    const FbxProperty factDf = material->FindProperty(FbxSurfaceMaterial::sDiffuseFactor);
+
+    if (property.IsValid())
+    {
+        FbxDouble3 color = property.Get<FbxDouble3>();
+        if (factDf.IsValid())
+        {
+            double factor = factDf.Get<FbxDouble>();
+            color[0] *= factor;
+            color[1] *= factor;
+            color[2] *= factor;
+        }
+
+        const int textureCount = property.GetSrcObjectCount<FbxFileTexture>();
+        const FbxFileTexture* texture = property.GetSrcObject<FbxFileTexture>(0);
+
+        if (texture)
+        {
+            const char* name = texture->GetName();
+            const char* filename = texture->GetFileName();
+            const char* relativeFilename = texture->GetRelativeFileName();
+            pathText = relativeFilename;
+        }
+    }
+}
+
+void GetWorldMat(FbxNode *node)
+{
+    FbxVector4 translation = node->GetGeometricTranslation(FbxNode::eSourcePivot);
+    FbxVector4 rotation = node->GetGeometricRotation(FbxNode::eSourcePivot);
+    FbxVector4 scaling = node->GetGeometricScaling(FbxNode::eSourcePivot);
+    FbxAMatrix geometryTransform;
+    geometryTransform.SetTRS(translation, rotation, scaling);
+    FbxAMatrix globalTransform = node->EvaluateGlobalTransform();
+    finalGlobalTransform = globalTransform * geometryTransform;
 }
 
 // Parcours du Scene Graph
@@ -288,34 +306,31 @@ static void ProcessNode(FbxNode *node, FbxNode *parent)
                     myVertex.texcoords.y = uv[1];
                 }
                 m_vertices.push_back(myVertex);
-            }
-        }
 
-        int materialCount = node->GetMaterialCount();
-        FbxSurfaceMaterial *material = node->GetMaterial(0);
-        const FbxProperty property = material->FindProperty(FbxSurfaceMaterial::sDiffuse);
-        const FbxProperty factDf = material->FindProperty(FbxSurfaceMaterial::sDiffuseFactor);
+                FbxLayerElementTangent* meshTangents = mesh->GetElementTangent(0);
+                if (meshTangents == nullptr)
+                {
+                    // sinon on genere des tangentes (pour le tangent space normal mapping)
+                    bool test = mesh->GenerateTangentsDataForAllUVSets(true);
+                    meshTangents = mesh->GetElementTangent(0);
+                }
 
-        if (property.IsValid())
-        {
-            FbxDouble3 color = property.Get<FbxDouble3>();
-            if (factDf.IsValid())
-            {
-                // le facteur s’applique generalement sur la propriete (ici RGB)
-                double factor = factDf.Get<FbxDouble>();
-                color[0] *= factor;
-                color[1] *= factor;
-                color[2] *= factor;
-            }
+                FbxLayerElement::EMappingMode tangentMode = meshTangents->GetMappingMode();
+                FbxLayerElement::EReferenceMode tangentRefMode = meshTangents->GetReferenceMode();
+                FbxVector4 tangent;
 
-            const int textureCount = property.GetSrcObjectCount<FbxFileTexture>();
-            const FbxFileTexture *texture = property.GetSrcObject<FbxFileTexture>(0);
+                if (tangentRefMode == FbxLayerElement::eDirect)
+                    tangent = meshTangents->GetDirectArray().GetAt(vertexId);
+                else if (tangentRefMode == FbxLayerElement::eIndexToDirect) 
+                {
+                    int indirectIndex = meshTangents->GetIndexArray().GetAt(vertexId);
+                    tangent = meshTangents->GetDirectArray().GetAt(indirectIndex);
+                }
 
-            if (texture)
-            {
-                const char *name = texture->GetName();
-                const char *filename = texture->GetFileName();
-                const char *relativeFilename = texture->GetRelativeFileName();
+                myVertex.tangent.x = tangent[0];
+                myVertex.tangent.y = tangent[1];
+                myVertex.tangent.z = tangent[2];
+                myVertex.tangent.w = tangent[3];
             }
         }
         break;
@@ -348,27 +363,43 @@ int main()
     glfwMakeContextCurrent(window);
     glfwSetKeyCallback(window, KeyCallback);
 
-    LoadFBX();
+    Initialize();
+    InitSceneFBX();
     FbxNode* root_node = m_scene->GetRootNode();
     FbxNode* model = root_node->GetChild(0);
     ProcessNode(model, root_node);
-
-    // etape 1. calcul de la matrice geometrique
-    FbxVector4 translation = model->GetGeometricTranslation(FbxNode::eSourcePivot);
-    FbxVector4 rotation = model->GetGeometricRotation(FbxNode::eSourcePivot);
-    FbxVector4 scaling = model->GetGeometricScaling(FbxNode::eSourcePivot);
-    FbxAMatrix geometryTransform;
-    geometryTransform.SetTRS(translation, rotation, scaling);
-
-    // etape 2. on recupere la matrice global (world) du mesh
-    FbxAMatrix globalTransform = model->EvaluateGlobalTransform();
-
-    // etape 3. on concatene les deux matrices, ce qui donne la matrice world finale
-    finalGlobalTransform = globalTransform * geometryTransform;
-
-    Initialize();
-
+    GetWorldMat(model);
+    GetMaterial(model);
     LoadTexture();
+
+    glGenVertexArrays(1, &m_VAO);
+    glBindVertexArray(m_VAO);
+
+    glGenBuffers(1, &m_VBO);
+    glBindBuffer(GL_ARRAY_BUFFER, m_VBO);
+
+    constexpr int STRIDE = sizeof(Vertex);
+    glBufferData(GL_ARRAY_BUFFER, STRIDE * m_vertices.size(), m_vertices.data(), GL_STATIC_DRAW);
+
+    const int POSITION = glGetAttribLocation(m_shader.GetProgram(), "a_position");
+    glEnableVertexAttribArray(POSITION);
+    glVertexAttribPointer(POSITION, 3, GL_FLOAT, false, STRIDE, (void*)offsetof(Vertex, position));
+
+    const int NORMAL = glGetAttribLocation(m_shader.GetProgram(), "a_normal");
+    glEnableVertexAttribArray(NORMAL);
+    glVertexAttribPointer(NORMAL, 3, GL_FLOAT, false, STRIDE, (void*)offsetof(Vertex, normal));
+
+    const int UV = glGetAttribLocation(m_shader.GetProgram(), "a_texcoords");
+    glEnableVertexAttribArray(UV);
+    glVertexAttribPointer(UV, 2, GL_FLOAT, false, STRIDE, (void*)offsetof(Vertex, texcoords));
+
+    const int TANGENT = glGetAttribLocation(m_shader.GetProgram(), "a_tangent");
+    glEnableVertexAttribArray(TANGENT);
+    glVertexAttribPointer(TANGENT, 2, GL_FLOAT, false, STRIDE, (void*)offsetof(Vertex, tangent));
+
+    glBindVertexArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
     while (!glfwWindowShouldClose(window))
     {
