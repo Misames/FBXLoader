@@ -46,12 +46,12 @@ void InitSceneFBX()
 {
     // Init SDK
     m_fbxManager = FbxManager::Create();
-    FbxIOSettings* ioSettings = FbxIOSettings::Create(m_fbxManager, IOSROOT);
+    FbxIOSettings *ioSettings = FbxIOSettings::Create(m_fbxManager, IOSROOT);
     m_fbxManager->SetIOSettings(ioSettings);
 
     // Create scene
     m_scene = FbxScene::Create(m_fbxManager, "Ma Scene");
-    FbxImporter* importer = FbxImporter::Create(m_fbxManager, "");
+    FbxImporter *importer = FbxImporter::Create(m_fbxManager, "");
     bool status = importer->Initialize("data/ironman.fbx", -1, m_fbxManager->GetIOSettings());
     status = importer->Import(m_scene);
     importer->Destroy();
@@ -105,8 +105,7 @@ void Display(GLFWwindow *window)
         1.f, 0.f, 0.f, 0.f,
         0.f, 1.f, 0.f, 0.f,
         0.f, 0.f, 1.f, 0.f,
-        0.f, 0.f, 0.f, 1.f
-    };
+        0.f, 0.f, 0.f, 1.f};
 
     const GLint matScaleLocation = glGetUniformLocation(m_shader.GetProgram(), "u_scale");
     glUniformMatrix4fv(matScaleLocation, 1, false, scale);
@@ -131,8 +130,7 @@ void Display(GLFWwindow *window)
         1.f, 0.f, 0.f, 0.f,
         0.f, 1.f, 0.f, 0.f,
         0.f, 0.f, 1.f, 0.f,
-        0.f, 0.f, -15.f, 1.f
-    };
+        0.f, 0.f, -15.f, 1.f};
     const GLint matTranslationLocation = glGetUniformLocation(m_shader.GetProgram(), "u_translation");
     glUniformMatrix4fv(matTranslationLocation, 1, false, translation);
 
@@ -145,7 +143,7 @@ void Display(GLFWwindow *window)
     constexpr float fov = 45.f;
     constexpr float fov_rad = fov * 3.141592654f / 180.f;
     const float f = 1.f / tanf(fov_rad / 2.f);
-    
+
     const float projectionPerspective[] = {
         f / aspectRatio, 0.f, 0.f, 0.f, // 1ere colonne
         0.f, f, 0.f, 0.f,
@@ -159,11 +157,10 @@ void Display(GLFWwindow *window)
     auto world = finalGlobalTransform.Double44();
 
     const float worldMat[] = {
-    static_cast<float>(world[0][0]), static_cast<float>(world[0][1]),static_cast<float>(world[0][2]), static_cast<float>(world[0][3]),
-    static_cast<float>(world[1][0]), static_cast<float>(world[1][1]),static_cast<float>(world[1][2]), static_cast<float>(world[1][3]),
-    static_cast<float>(world[2][0]), static_cast<float>(world[2][1]),static_cast<float>(world[2][2]), static_cast<float>(world[2][3]),
-    static_cast<float>(world[3][0]), static_cast<float>(world[3][1]),static_cast<float>(world[3][2]), static_cast<float>(world[3][3])
-    };
+        static_cast<float>(world[0][0]), static_cast<float>(world[0][1]), static_cast<float>(world[0][2]), static_cast<float>(world[0][3]),
+        static_cast<float>(world[1][0]), static_cast<float>(world[1][1]), static_cast<float>(world[1][2]), static_cast<float>(world[1][3]),
+        static_cast<float>(world[2][0]), static_cast<float>(world[2][1]), static_cast<float>(world[2][2]), static_cast<float>(world[2][3]),
+        static_cast<float>(world[3][0]), static_cast<float>(world[3][1]), static_cast<float>(world[3][2]), static_cast<float>(world[3][3])};
 
     const GLint worldMatlocation = glGetUniformLocation(m_shader.GetProgram(), "u_world");
     glUniformMatrix4fv(worldMatlocation, 1, false, worldMat);
@@ -186,7 +183,7 @@ static void KeyCallback(GLFWwindow *window, int key, int scancode, int action, i
 void GetMaterial(FbxNode *node)
 {
     int materialCount = node->GetMaterialCount();
-    FbxSurfaceMaterial* material = node->GetMaterial(0);
+    FbxSurfaceMaterial *material = node->GetMaterial(0);
     const FbxProperty property = material->FindProperty(FbxSurfaceMaterial::sDiffuse);
     const FbxProperty factDf = material->FindProperty(FbxSurfaceMaterial::sDiffuseFactor);
 
@@ -202,13 +199,13 @@ void GetMaterial(FbxNode *node)
         }
 
         const int textureCount = property.GetSrcObjectCount<FbxFileTexture>();
-        const FbxFileTexture* texture = property.GetSrcObject<FbxFileTexture>(0);
+        const FbxFileTexture *texture = property.GetSrcObject<FbxFileTexture>(0);
 
         if (texture)
         {
-            const char* name = texture->GetName();
-            const char* filename = texture->GetFileName();
-            const char* relativeFilename = texture->GetRelativeFileName();
+            const char *name = texture->GetName();
+            const char *filename = texture->GetFileName();
+            const char *relativeFilename = texture->GetRelativeFileName();
             pathTexture = relativeFilename;
         }
     }
@@ -238,41 +235,38 @@ static void ProcessNode(FbxNode *node, FbxNode *parent)
         FbxMesh *mesh = node->GetMesh();
         FbxVector4 *positions = mesh->GetControlPoints();
         int nbPlygone = mesh->GetPolygonCount();
-        int nbVertex = mesh->GetPolygonVertexCount();
-        int *vertex = mesh->GetPolygonVertices();
 
-        for (int i = 0; i < nbPlygone; ++i)
+        for (int i = 0; i < nbPlygone; i++)
         {
             int size = mesh->GetPolygonSize(i);
-            for (int k = 0; k < size; ++k)
+            for (int k = 0; k < size; k++)
             {
-                int vertexId = mesh->GetPolygonVertex(i, k);
-                FbxVector4 currentControlPoint = mesh->GetControlPointAt(vertexId);
-                myVertex.position.x = currentControlPoint[0];
-                myVertex.position.y = currentControlPoint[1];
-                myVertex.position.z = currentControlPoint[2];
+                int vId = mesh->GetPolygonVertex(i, k);
 
+                // Positon
+                FbxVector4 position = mesh->GetControlPointAt(vId);
+                myVertex.position = glm::vec3(positions[vId][0], positions[vId][1], positions[vId][2]);
+
+                // Normal
                 FbxVector4 normal;
-                mesh->GetPolygonVertexNormal(i, vertexId, normal);
-                myVertex.normal.x = normal[0];
-                myVertex.normal.y = normal[1];
-                myVertex.normal.z = normal[2];
+                mesh->GetPolygonVertexNormal(i, k, normal);
+                myVertex.normal = glm::vec3(normal[0], normal[1], normal[2]);
 
+                // UV
                 FbxStringList nameListUV;
                 mesh->GetUVSetNames(nameListUV);
                 int totalUVChannels = nameListUV.GetCount();
-                for (size_t j = 0; j < totalUVChannels; ++j)
+                for (size_t j = 0; j < totalUVChannels; j++)
                 {
-                    const char *nameUV = nameListUV.GetStringAt(j);
                     FbxVector2 uv;
+                    const char *nameUV = nameListUV.GetStringAt(j);
                     bool isUnMapped;
-                    bool hasUV = mesh->GetPolygonVertexUV(i, vertexId, nameUV, uv, isUnMapped);
-                    myVertex.texcoords.x = uv[0];
-                    myVertex.texcoords.y = uv[1];
+                    bool hasUV = mesh->GetPolygonVertexUV(i, vId, nameUV, uv, isUnMapped);
+                    myVertex.texcoords = glm::vec2(uv[0], uv[1]);
                 }
-                m_vertices.push_back(myVertex);
 
-                FbxLayerElementTangent* meshTangents = mesh->GetElementTangent(0);
+                // Tangent
+                FbxLayerElementTangent *meshTangents = mesh->GetElementTangent(0);
                 if (meshTangents == nullptr)
                 {
                     // sinon on genere des tangentes (pour le tangent space normal mapping)
@@ -285,17 +279,15 @@ static void ProcessNode(FbxNode *node, FbxNode *parent)
                 FbxVector4 tangent;
 
                 if (tangentRefMode == FbxLayerElement::eDirect)
-                    tangent = meshTangents->GetDirectArray().GetAt(vertexId);
-                else if (tangentRefMode == FbxLayerElement::eIndexToDirect) 
+                    tangent = meshTangents->GetDirectArray().GetAt(vId);
+                else if (tangentRefMode == FbxLayerElement::eIndexToDirect)
                 {
-                    int indirectIndex = meshTangents->GetIndexArray().GetAt(vertexId);
+                    int indirectIndex = meshTangents->GetIndexArray().GetAt(vId);
                     tangent = meshTangents->GetDirectArray().GetAt(indirectIndex);
                 }
 
-                myVertex.tangent.x = tangent[0];
-                myVertex.tangent.y = tangent[1];
-                myVertex.tangent.z = tangent[2];
-                myVertex.tangent.w = tangent[3];
+                myVertex.tangent = glm::vec4(tangent[0], tangent[1], tangent[2], tangent[3]);
+                m_vertices.emplace_back(myVertex);
             }
         }
         break;
@@ -311,7 +303,7 @@ static void ProcessNode(FbxNode *node, FbxNode *parent)
 
 int main()
 {
-    GLFWwindow* window;
+    GLFWwindow *window;
 
     glfwSetErrorCallback(ErrorCallback);
 
@@ -330,8 +322,8 @@ int main()
 
     Initialize();
     InitSceneFBX();
-    FbxNode* root_node = m_scene->GetRootNode();
-    FbxNode* model = root_node->GetChild(0);
+    FbxNode *root_node = m_scene->GetRootNode();
+    FbxNode *model = root_node->GetChild(0);
     ProcessNode(model, root_node);
     GetWorldMat(model);
     GetMaterial(model);
@@ -349,7 +341,7 @@ int main()
 
     // charge et génère la texture
     int width, height, nrChannels;
-    unsigned char* data = stbi_load(pathTexture.c_str(), &width, &height, &nrChannels, 0);
+    unsigned char *data = stbi_load(pathTexture.c_str(), &width, &height, &nrChannels, 0);
 
     if (data)
     {
@@ -370,19 +362,19 @@ int main()
 
     const int POSITION = glGetAttribLocation(m_shader.GetProgram(), "a_position");
     glEnableVertexAttribArray(POSITION);
-    glVertexAttribPointer(POSITION, 3, GL_FLOAT, false, STRIDE, (void*)offsetof(Vertex, position));
+    glVertexAttribPointer(POSITION, 3, GL_FLOAT, false, STRIDE, (void *)offsetof(Vertex, position));
 
     const int NORMAL = glGetAttribLocation(m_shader.GetProgram(), "a_normal");
     glEnableVertexAttribArray(NORMAL);
-    glVertexAttribPointer(NORMAL, 3, GL_FLOAT, false, STRIDE, (void*)offsetof(Vertex, normal));
+    glVertexAttribPointer(NORMAL, 3, GL_FLOAT, false, STRIDE, (void *)offsetof(Vertex, normal));
 
     const int UV = glGetAttribLocation(m_shader.GetProgram(), "a_texcoords");
     glEnableVertexAttribArray(UV);
-    glVertexAttribPointer(UV, 2, GL_FLOAT, false, STRIDE, (void*)offsetof(Vertex, texcoords));
+    glVertexAttribPointer(UV, 2, GL_FLOAT, false, STRIDE, (void *)offsetof(Vertex, texcoords));
 
     const int TANGENT = glGetAttribLocation(m_shader.GetProgram(), "a_tangent");
     glEnableVertexAttribArray(TANGENT);
-    glVertexAttribPointer(TANGENT, 2, GL_FLOAT, false, STRIDE, (void*)offsetof(Vertex, tangent));
+    glVertexAttribPointer(TANGENT, 2, GL_FLOAT, false, STRIDE, (void *)offsetof(Vertex, tangent));
 
     glBindVertexArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);

@@ -19,8 +19,8 @@ uniform mat4 u_world;
 void main()
 {
     v_normal = mat3(u_rotation) * a_normal;
-    v_texcoords = a_texcoords;
-    v_tangent = a_tangent;
+    v_texcoords = mat2(u_rotation) * a_texcoords;
+    v_tangent = mat4(u_rotation) * a_tangent;
     vec4 pos = vec4(a_position, 1.0);
     gl_Position = u_projection * u_translation * u_rotation * u_scale * u_world * pos;
 }

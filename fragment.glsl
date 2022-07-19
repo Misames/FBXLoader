@@ -1,12 +1,14 @@
 #version 330
 
-varying vec3 v_normal;
 varying vec2 v_texcoords;
+varying vec3 v_normal;
 varying vec4 v_tangent;
 
 uniform sampler2D u_sampler;
 
 const vec3 L = normalize(vec3(0.0, 0.0, 1.0));
+
+out vec4 o_FragColor;
 
 float Diffuse(const vec3 n, const vec3 l)
 {
@@ -38,5 +40,5 @@ void main()
 
     float lambert = Diffuse(N, L);
     vec4 texcolor = texture2D(u_sampler, v_texcoords);
-    gl_FragColor = vec4(vec3(lambert), 1.0) * texcolor;
+    o_FragColor = vec4(vec3(lambert), 1.0) * texcolor;
 }
