@@ -2,10 +2,10 @@
 
 struct Vertex
 {
-    glm::vec3 position;  //  3x4 octets = 12
-    glm::vec3 normal;    // +3x4 octets = 24
-    glm::vec2 texcoords; // +2x4 octets = 32
-    glm::vec4 tangent;   // +4x4 octets = 48
+    glm::vec3 position; //  3x4 octets = 12
+    glm::vec3 normal;   // +3x4 octets = 24
+    glm::vec2 uv;       // +2x4 octets = 32
+    glm::vec4 tangent;  // +4x4 octets = 48
 
     static constexpr float EPSILON = 0.001f;
 
@@ -25,7 +25,7 @@ struct Vertex
 
     inline bool IsSame(const Vertex &v) const
     {
-        if (IsSame(position, v.position) && IsSame(normal, v.normal) && IsSame(texcoords, v.texcoords))
+        if (IsSame(position, v.position) && IsSame(normal, v.normal) && IsSame(uv, v.uv))
             return true;
         return false;
     }

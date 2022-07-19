@@ -118,10 +118,12 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="FBXLoader\Camera.cpp" />
     <ClCompile Include="fbxloader\FBXLoader.cpp" />
     <ClCompile Include="fbxloader\GLShader.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="FBXLoader\Camera.hpp" />
     <ClInclude Include="fbxloader\GLShader.h" />
     <ClInclude Include="FBXLoader\Vertex.h" />
   </ItemGroup>

@@ -1,21 +1,26 @@
-﻿#define FBXSDK_SHARED
+#define FBXSDK_SHARED
 #define STB_IMAGE_IMPLEMENTATION
-#include <stb_image.h>
+
 #include <iostream>
 #include <vector>
+
 #include <fbxsdk.h>
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
-#include "Vertex.h"
+#include <stb_image.h>
+
 #include "GLShader.h"
+#include "Camera.hpp"
+#include "Vertex.h"
 
 using namespace std;
 using namespace fbxsdk;
 
-vector<Vertex> m_vertices;
+vector<Vertex> vertices;
 string pathTexture;
-GLuint m_VAO;
-GLuint m_VBO;
+GLuint VAO, VBO;
+Camera cam(640, 480, glm::vec3(0.0f, 0.0f, 2.0f));
+unsigned int texture;
 
 // Shader
 GLShader m_shader;
@@ -74,8 +79,9 @@ void InitSceneFBX()
 
 void Shutdown()
 {
-    glDeleteVertexArrays(1, &m_VAO);
-    glDeleteBuffers(1, &m_VBO);
+    glDeleteTextures(1, &texture);
+    glDeleteVertexArrays(1, &VAO);
+    glDeleteBuffers(1, &VBO);
     m_shader.Destroy();
     m_scene->Destroy();
     m_fbxManager->Destroy();
@@ -86,12 +92,19 @@ void Display(GLFWwindow *window)
     int widthWindow, heightWindow;
     glfwGetWindowSize(window, &widthWindow, &heightWindow);
     glViewport(0, 0, widthWindow, heightWindow);
-
     glClearColor(0.5f, 0.5f, 0.5f, 1.f);
-    glClear(GL_COLOR_BUFFER_BIT);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glEnable(GL_DEPTH_TEST);
+    // on peut egalement modifier la fonction de test
+    // glDepthFunc(GL_LEQUAL); // par ex: en inferieur ou egal
+    // active la suppression des faces arrieres
+    glEnable(GL_CULL_FACE);
 
     GLuint basicProgram = m_shader.GetProgram();
     glUseProgram(basicProgram);
+
+    const int sampler = glGetUniformLocation(basicProgram, "u_sampler");
+    glUniform1i(sampler, 0);
 
     // Actuel Time
     const int timeLocation = glGetUniformLocation(m_shader.GetProgram(), "u_time");
@@ -114,11 +127,10 @@ void Display(GLFWwindow *window)
     // MATRICE DE ROTATION
     //
     const float rot[] = {
-        cosf(time), 0.f, -sinf(time), 0.f, // 1ere colonne
+        1.f, 0.f, 0.f, 0.f,
         0.f, 1.f, 0.f, 0.f,
-        sinf(time), 0.f, cosf(time), 0.f,
-        0.f, 0.f, 0.f, 1.f // 4eme colonne
-    };
+        0.f, 0.f, 1.f, 0.f,
+        0.f, 0.f, 0.f, 1.f};
 
     const GLint matRotLocation = glGetUniformLocation(m_shader.GetProgram(), "u_rotation");
     glUniformMatrix4fv(matRotLocation, 1, false, rot);
@@ -151,9 +163,6 @@ void Display(GLFWwindow *window)
         0.f, 0.f, -(2.f * farZ * nearZ) / (farZ - nearZ), 0.f // 4eme colonne
     };
 
-    const GLint matProjectionLocation = glGetUniformLocation(m_shader.GetProgram(), "u_projection");
-    glUniformMatrix4fv(matProjectionLocation, 1, false, projectionPerspective);
-
     auto world = finalGlobalTransform.Double44();
 
     const float worldMat[] = {
@@ -165,8 +174,10 @@ void Display(GLFWwindow *window)
     const GLint worldMatlocation = glGetUniformLocation(m_shader.GetProgram(), "u_world");
     glUniformMatrix4fv(worldMatlocation, 1, false, worldMat);
 
-    glBindVertexArray(m_VAO);
-    glDrawArrays(GL_TRIANGLES, 0, m_vertices.size());
+    cam.Matrix(45.0f, 0.1f, 1000.0f, m_shader, "u_projection");
+
+    glBindVertexArray(VAO);
+    glDrawArrays(GL_TRIANGLES, 0, vertices.size());
 }
 
 static void ErrorCallback(int error, const char *description)
@@ -206,7 +217,6 @@ void GetMaterial(FbxNode *node)
             const char *name = texture->GetName();
             const char *filename = texture->GetFileName();
             const char *relativeFilename = texture->GetRelativeFileName();
-            pathTexture = relativeFilename;
         }
     }
 }
@@ -262,7 +272,7 @@ static void ProcessNode(FbxNode *node, FbxNode *parent)
                     const char *nameUV = nameListUV.GetStringAt(j);
                     bool isUnMapped;
                     bool hasUV = mesh->GetPolygonVertexUV(i, vId, nameUV, uv, isUnMapped);
-                    myVertex.texcoords = glm::vec2(uv[0], uv[1]);
+                    myVertex.uv = glm::vec2(uv[0], uv[1]);
                 }
 
                 // Tangent
@@ -287,7 +297,8 @@ static void ProcessNode(FbxNode *node, FbxNode *parent)
                 }
 
                 myVertex.tangent = glm::vec4(tangent[0], tangent[1], tangent[2], tangent[3]);
-                m_vertices.emplace_back(myVertex);
+
+                vertices.emplace_back(myVertex);
             }
         }
         break;
@@ -329,19 +340,13 @@ int main()
     GetMaterial(model);
 
     // TEXTURE
-    unsigned int texture;
+    glActiveTexture(GL_TEXTURE0);
     glGenTextures(1, &texture);
     glBindTexture(GL_TEXTURE_2D, texture);
 
-    // définit les options de la texture actuellement liée
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
     // charge et génère la texture
     int width, height, nrChannels;
-    unsigned char *data = stbi_load(pathTexture.c_str(), &width, &height, &nrChannels, 0);
+    auto data = stbi_load("data/ironman.fbm/ironman.dff.png", &width, &height, &nrChannels, 0);
 
     if (data)
     {
@@ -351,14 +356,14 @@ int main()
 
     stbi_image_free(data);
 
-    glGenVertexArrays(1, &m_VAO);
-    glBindVertexArray(m_VAO);
+    glGenVertexArrays(1, &VAO);
+    glBindVertexArray(VAO);
 
-    glGenBuffers(1, &m_VBO);
-    glBindBuffer(GL_ARRAY_BUFFER, m_VBO);
+    glGenBuffers(1, &VBO);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
 
     constexpr int STRIDE = sizeof(Vertex);
-    glBufferData(GL_ARRAY_BUFFER, STRIDE * m_vertices.size(), m_vertices.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, STRIDE * vertices.size(), vertices.data(), GL_STATIC_DRAW);
 
     const int POSITION = glGetAttribLocation(m_shader.GetProgram(), "a_position");
     glEnableVertexAttribArray(POSITION);
@@ -368,9 +373,9 @@ int main()
     glEnableVertexAttribArray(NORMAL);
     glVertexAttribPointer(NORMAL, 3, GL_FLOAT, false, STRIDE, (void *)offsetof(Vertex, normal));
 
-    const int UV = glGetAttribLocation(m_shader.GetProgram(), "a_texcoords");
+    const int UV = glGetAttribLocation(m_shader.GetProgram(), "a_uv");
     glEnableVertexAttribArray(UV);
-    glVertexAttribPointer(UV, 2, GL_FLOAT, false, STRIDE, (void *)offsetof(Vertex, texcoords));
+    glVertexAttribPointer(UV, 2, GL_FLOAT, false, STRIDE, (void *)offsetof(Vertex, uv));
 
     const int TANGENT = glGetAttribLocation(m_shader.GetProgram(), "a_tangent");
     glEnableVertexAttribArray(TANGENT);
@@ -382,11 +387,11 @@ int main()
 
     while (!glfwWindowShouldClose(window))
     {
+        cam.Inputs(window);
         Display(window);
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
-
     Shutdown();
     glfwTerminate();
     return 0;
