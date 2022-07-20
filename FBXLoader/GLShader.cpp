@@ -1,7 +1,5 @@
-#include <fstream>
-#include <iostream>
-#include <GL/glew.h>
-#include "GLShader.h"
+
+#include "GLShader.hpp"
 
 bool ValidateShader(GLuint shader)
 {
@@ -11,36 +9,32 @@ bool ValidateShader(GLuint shader)
     if (!compiled)
     {
         GLint infoLen = 0;
-
         glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &infoLen);
 
         if (infoLen > 1)
         {
-            char* infoLog = new char[1 + infoLen];
-
+            char *infoLog = new char[1 + infoLen];
             glGetShaderInfoLog(shader, infoLen, NULL, infoLog);
             std::cout << "Error compiling shader:" << infoLog << std::endl;
-
             delete[] infoLog;
         }
 
         // on supprime le shader object car il est inutilisable
         glDeleteShader(shader);
-
         return false;
     }
 
     return true;
 }
 
-bool GLShader::LoadVertexShader(const char* filename)
+bool GLShader::LoadVertexShader(const char *filename)
 {
     // 1. Charger le fichier en memoire
     std::ifstream fin(filename, std::ios::in | std::ios::binary);
     fin.seekg(0, std::ios::end);
     uint32_t length = (uint32_t)fin.tellg();
     fin.seekg(0, std::ios::beg);
-    char* buffer = nullptr;
+    char *buffer = nullptr;
     buffer = new char[length + 1];
     buffer[length] = '\0';
     fin.read(buffer, length);
@@ -59,14 +53,14 @@ bool GLShader::LoadVertexShader(const char* filename)
     return ValidateShader(m_VertexShader);
 }
 
-bool GLShader::LoadGeometryShader(const char* filename)
+bool GLShader::LoadGeometryShader(const char *filename)
 {
     // 1. Charger le fichier en memoire
     std::ifstream fin(filename, std::ios::in | std::ios::binary);
     fin.seekg(0, std::ios::end);
     uint32_t length = (uint32_t)fin.tellg();
     fin.seekg(0, std::ios::beg);
-    char* buffer = nullptr;
+    char *buffer = nullptr;
     buffer = new char[length + 1];
     buffer[length] = '\0';
     fin.read(buffer, length);
@@ -85,13 +79,13 @@ bool GLShader::LoadGeometryShader(const char* filename)
     return ValidateShader(m_GeometryShader);
 }
 
-bool GLShader::LoadFragmentShader(const char* filename)
+bool GLShader::LoadFragmentShader(const char *filename)
 {
     std::ifstream fin(filename, std::ios::in | std::ios::binary);
     fin.seekg(0, std::ios::end);
     uint32_t length = (uint32_t)fin.tellg();
     fin.seekg(0, std::ios::beg);
-    char* buffer = nullptr;
+    char *buffer = nullptr;
     buffer = new char[length + 1];
     buffer[length] = '\0';
     fin.read(buffer, length);
@@ -129,16 +123,13 @@ bool GLShader::Create()
 
         if (infoLen > 1)
         {
-            char* infoLog = new char[infoLen + 1];
-
+            char *infoLog = new char[infoLen + 1];
             glGetProgramInfoLog(m_Program, infoLen, NULL, infoLog);
             std::cout << "Erreur de lien du programme: " << infoLog << std::endl;
-
             delete (infoLog);
         }
 
         glDeleteProgram(m_Program);
-
         return false;
     }
 

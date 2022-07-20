@@ -1,6 +1,6 @@
 #pragma once
 
-#include <GL/glew.h>
+#include "Common.hpp"
 #include <GLFW/glfw3.h>
 #include <glm.hpp>
 #include <gtc/matrix_transform.hpp>
@@ -8,7 +8,7 @@
 #include <gtx/rotate_vector.hpp>
 #include <gtx/vector_angle.hpp>
 
-#include "GLShader.h"
+#include "GLShader.hpp"
 
 class Camera
 {
@@ -34,6 +34,8 @@ public:
 
     // Updates and exports the camera matrix to the Vertex Shader
     void Matrix(float, float, float, GLShader &, const char *);
+
+    void MatrixOffScreen(float, float, float, uint32_t);
 
     // Handles camera inputs
     void Inputs(GLFWwindow *);

@@ -27,15 +27,39 @@
     <ClCompile Include="FBXLoader\Camera.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="FBXLoader\FrameBuffer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="FBXLoader\OpenGLcore.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="FBXLoader\Texture.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="fbxloader\GLShader.h">
+    <ClInclude Include="FBXLoader\Camera.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="FBXLoader\Vertex.h">
-      <Filter>Source Files</Filter>
+    <ClInclude Include="FBXLoader\FrameBuffer.hpp">
+      <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="FBXLoader\Camera.hpp">
+    <ClInclude Include="FBXLoader\Material.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="FBXLoader\OpenGLcore.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="FBXLoader\Texture.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="FBXLoader\Vertex.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="FBXLoader\GLShader.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="FBXLoader\Common.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

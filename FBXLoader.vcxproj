@@ -120,12 +120,20 @@
   <ItemGroup>
     <ClCompile Include="FBXLoader\Camera.cpp" />
     <ClCompile Include="fbxloader\FBXLoader.cpp" />
+    <ClCompile Include="FBXLoader\FrameBuffer.cpp" />
     <ClCompile Include="fbxloader\GLShader.cpp" />
+    <ClCompile Include="FBXLoader\OpenGLcore.cpp" />
+    <ClCompile Include="FBXLoader\Texture.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="FBXLoader\Camera.hpp" />
-    <ClInclude Include="fbxloader\GLShader.h" />
-    <ClInclude Include="FBXLoader\Vertex.h" />
+    <ClInclude Include="FBXLoader\Common.hpp" />
+    <ClInclude Include="FBXLoader\FrameBuffer.hpp" />
+    <ClInclude Include="FBXLoader\GLShader.hpp" />
+    <ClInclude Include="FBXLoader\Material.hpp" />
+    <ClInclude Include="FBXLoader\OpenGLcore.hpp" />
+    <ClInclude Include="FBXLoader\Texture.hpp" />
+    <ClInclude Include="FBXLoader\Vertex.hpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="fragment.glsl" />

@@ -7,7 +7,7 @@ Camera::Camera(int width, int height, glm::vec3 position)
     Position = position;
 }
 
-void Camera::Matrix(float FOVdeg, float nearPlane, float farPlane, GLShader& shader, const char* uniform)
+void Camera::Matrix(float FOVdeg, float nearPlane, float farPlane, GLShader &shader, const char *uniform)
 {
     // Initializes matrices since otherwise they will be the null matrix
     glm::mat4 view = glm::mat4(1.0f);
@@ -22,7 +22,23 @@ void Camera::Matrix(float FOVdeg, float nearPlane, float farPlane, GLShader& sha
     glUniformMatrix4fv(glGetUniformLocation(shader.GetProgram(), uniform), 1, GL_FALSE, glm::value_ptr(projection * view));
 }
 
-void Camera::Inputs(GLFWwindow* window)
+void Camera::MatrixOffScreen(float FOVdeg, float nearPlane, float farPlane, uint32_t UBO)
+{
+    glm::vec3 positionCamera = { 0.f, 0.f, 200.f };
+    glm::vec3 positionProjector = { 0.f, 0.f, 100.f };
+
+    // passage des matrices de notre projecteur
+    glm::mat4 projectorMatrices[2];
+    projectorMatrices[0] = glm::lookAt(positionProjector, glm::vec3(0.f), glm::vec3(0.f, 1.f, 0.f));
+    float projectorAR = 1.0f;
+    projectorMatrices[1] = glm::perspective(glm::radians(45.f), projectorAR, 0.1f, 1000.f);
+
+    glBindBuffer(GL_UNIFORM_BUFFER, UBO);
+    glBufferData(GL_UNIFORM_BUFFER, 2 * sizeof(glm::mat4), projectorMatrices, GL_STREAM_DRAW);
+
+}
+
+void Camera::Inputs(GLFWwindow *window)
 {
     // Handles key inputs
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)

@@ -1,5 +1,4 @@
 #define FBXSDK_SHARED
-#define STB_IMAGE_IMPLEMENTATION
 
 #include <iostream>
 #include <vector>
@@ -7,23 +6,32 @@
 #include <fbxsdk.h>
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
-#include <stb_image.h>
 
-#include "GLShader.h"
+#include "OpenGLcore.hpp"
+#include "GLShader.hpp"
+#include "FrameBuffer.hpp"
+#include "Vertex.hpp"
+#include "Texture.hpp"
+#include "Material.hpp"
 #include "Camera.hpp"
-#include "Vertex.h"
 
 using namespace std;
 using namespace fbxsdk;
 
 vector<Vertex> vertices;
 string pathTexture;
-GLuint VAO, VBO;
+uint32_t MatricesUBO, MaterialUBO;
+uint32_t ProjectorUBO, ProjectorTexture;
 Camera cam(640, 480, glm::vec3(0.0f, 0.0f, 2.0f));
-unsigned int texture;
+GLuint texture;
+
+// FrameBuffer
+Framebuffer offscreenBuffer;
+// dimensions du back buffer / Fenetre
+int32_t width, height;
 
 // Shader
-GLShader m_shader;
+GLShader shader;
 
 // Scene FBX
 FbxManager *m_fbxManager;
@@ -41,10 +49,73 @@ void Initialize()
     cout << "Vendor : " << glGetString(GL_VENDOR) << endl;
     cout << "Renderer : " << glGetString(GL_RENDERER) << endl;
 
+    Texture::SetupManager();
+
     // Shader
-    m_shader.LoadVertexShader("vertex.glsl");
-    m_shader.LoadFragmentShader("fragment.glsl");
-    m_shader.Create();
+    shader.LoadVertexShader("vertex.glsl");
+    shader.LoadFragmentShader("fragment.glsl");
+    shader.Create();
+
+    GLuint basicProgram = shader.GetProgram();
+    glUseProgram(basicProgram);
+
+    const int POSITION = glGetAttribLocation(basicProgram, "a_position");
+    const int NORMAL = glGetAttribLocation(basicProgram, "a_normal");
+    const int UV = glGetAttribLocation(basicProgram, "a_uv");
+    const int TANGENT = glGetAttribLocation(basicProgram, "a_tangent");
+
+    const int MatricesBindingIndex = 0;
+    const int MaterialBindingIndex = 1;
+    const int ProjectorBindingIndex = 2;
+
+    glGenBuffers(1, &MaterialUBO);
+    glBindBuffer(GL_UNIFORM_BUFFER, MaterialUBO);
+    // Le materiau va etre mis a jour plusieurs fois par frame -> DYNAMIC
+    glBufferData(GL_UNIFORM_BUFFER, sizeof(Material), nullptr, GL_DYNAMIC_DRAW);
+    glBindBufferBase(GL_UNIFORM_BUFFER, MaterialBindingIndex, MaterialUBO);
+    // malheureusement en OpenGL3 il faut faire les appels suivants pour chaque shader program ...
+    int materialBlockIndex = glGetUniformBlockIndex(basicProgram, "Materials");
+    glUniformBlockBinding(basicProgram, materialBlockIndex, MaterialBindingIndex);
+
+    glGenBuffers(1, &MatricesUBO);
+    glBindBuffer(GL_UNIFORM_BUFFER, MatricesUBO);
+    // Les matrices vont etre mis a jour une fois par frame -> STREAM
+    glBufferData(GL_UNIFORM_BUFFER, 2 * sizeof(glm::mat4), nullptr, GL_STREAM_DRAW);
+    glBindBufferBase(GL_UNIFORM_BUFFER, MatricesBindingIndex, MatricesUBO);
+    // malheureusement en OpenGL3 il faut faire les appels suivants pour chaque shader program ...
+    int matricesBlockIndex = glGetUniformBlockIndex(basicProgram, "Matrices");
+    glUniformBlockBinding(basicProgram, matricesBlockIndex, MatricesBindingIndex);
+
+    glGenBuffers(1, &ProjectorUBO);
+    glBindBuffer(GL_UNIFORM_BUFFER, ProjectorUBO);
+    // Les matrices vont etre mis a jour une fois par frame -> STREAM
+    glBufferData(GL_UNIFORM_BUFFER, 2 * sizeof(glm::mat4), nullptr, GL_STREAM_DRAW);
+    glBindBufferBase(GL_UNIFORM_BUFFER, ProjectorBindingIndex, ProjectorUBO);
+    int projectorBlockIndex = glGetUniformBlockIndex(basicProgram, "ProjectorMatrices");
+    glUniformBlockBinding(basicProgram, projectorBlockIndex, ProjectorBindingIndex);
+
+    ProjectorTexture = Texture::LoadTexture("data/ironman.fbm/ironman.dff.png");
+    glBindBuffer(GL_UNIFORM_BUFFER, 0);
+
+    constexpr int STRIDE = sizeof(Vertex);
+    glBufferData(GL_ARRAY_BUFFER, STRIDE * vertices.size(), vertices.data(), GL_STATIC_DRAW);
+
+    glVertexAttribPointer(POSITION, 3, GL_FLOAT, false, STRIDE, (void *)offsetof(Vertex, position));
+    glVertexAttribPointer(NORMAL, 3, GL_FLOAT, false, STRIDE, (void *)offsetof(Vertex, normal));
+    glVertexAttribPointer(UV, 2, GL_FLOAT, false, STRIDE, (void *)offsetof(Vertex, uv));
+    glVertexAttribPointer(TANGENT, 2, GL_FLOAT, false, STRIDE, (void *)offsetof(Vertex, tangent));
+
+    glEnableVertexAttribArray(POSITION);
+    glEnableVertexAttribArray(NORMAL);
+    glEnableVertexAttribArray(UV);
+    glEnableVertexAttribArray(TANGENT);
+
+    glEnable(GL_FRAMEBUFFER_SRGB);
+    offscreenBuffer.CreateFramebuffer(width, height, true);
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    glUseProgram(0);
 }
 
 void InitSceneFBX()
@@ -79,89 +150,109 @@ void InitSceneFBX()
 
 void Shutdown()
 {
-    glDeleteTextures(1, &texture);
-    glDeleteVertexArrays(1, &VAO);
-    glDeleteBuffers(1, &VBO);
-    m_shader.Destroy();
+    glUseProgram(0);
+    glBindVertexArray(0);
+    glDeleteBuffers(1, &ProjectorUBO);
+    glDeleteBuffers(1, &MaterialUBO);
+    glDeleteBuffers(1, &MatricesUBO);
+    Texture::PurgeTextures();
+    shader.Destroy();
     m_scene->Destroy();
     m_fbxManager->Destroy();
 }
 
+void RenderOffscreen()
+{
+    offscreenBuffer.EnableRender();
+    glClearColor(0.5f, 0.5f, 0.5f, 1.f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glViewport(0, 0, width, height);
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_CULL_FACE);
+
+    uint32_t program = shader.GetProgram();
+    glUseProgram(program);
+
+    // Cam / projection / vue
+    cam.MatrixOffScreen(45.0f, 0.1f, 1000.0f, ProjectorUBO);
+
+    // Texture
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, ProjectorTexture);
+    int projectorLocation = glGetUniformLocation(program, "u_ProjectorTexture");
+    glUniform1i(projectorLocation, 1);
+
+    // position de la camera
+    int32_t camPosLocation = glGetUniformLocation(program, "u_CameraPosition");
+    glUniform3fv(camPosLocation, 1, &cam.Position.x);
+
+    glBindBuffer(GL_UNIFORM_BUFFER, MaterialUBO);
+    Material &mat = Material();
+
+    void *mappedBuffer = glMapBufferRange(GL_UNIFORM_BUFFER, 0, sizeof(Material), GL_MAP_WRITE_BIT);
+    Material *ubo = reinterpret_cast<Material *>(mappedBuffer);
+    *ubo = mat;
+    glUnmapBuffer(GL_UNIFORM_BUFFER);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, mat.diffuseTexture);
+
+    glDrawArrays(GL_TRIANGLES, 0, vertices.size());
+}
+
 void Display(GLFWwindow *window)
 {
-    int widthWindow, heightWindow;
-    glfwGetWindowSize(window, &widthWindow, &heightWindow);
-    glViewport(0, 0, widthWindow, heightWindow);
+    RenderOffscreen();
+
+    glfwGetWindowSize(window, &width, &height);
+    glViewport(0, 0, width, height);
     glClearColor(0.5f, 0.5f, 0.5f, 1.f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glEnable(GL_DEPTH_TEST);
-    // on peut egalement modifier la fonction de test
-    // glDepthFunc(GL_LEQUAL); // par ex: en inferieur ou egal
-    // active la suppression des faces arrieres
     glEnable(GL_CULL_FACE);
+    Framebuffer::RenderToBackBuffer(width, height);
 
-    GLuint basicProgram = m_shader.GetProgram();
+    GLuint basicProgram = shader.GetProgram();
     glUseProgram(basicProgram);
 
-    const int sampler = glGetUniformLocation(basicProgram, "u_sampler");
-    glUniform1i(sampler, 0);
+    int32_t samplerLocation = glGetUniformLocation(basicProgram, "u_Texture");
+    glUniform1i(samplerLocation, 0);
 
-    // Actuel Time
-    const int timeLocation = glGetUniformLocation(m_shader.GetProgram(), "u_time");
-    float time = static_cast<float>(glfwGetTime());
-    glUniform1f(timeLocation, time);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, offscreenBuffer.colorBuffer);
 
     //
     // MATRICE DE SCALE
     //
-    const float scale[] = {
-        1.f, 0.f, 0.f, 0.f,
-        0.f, 1.f, 0.f, 0.f,
-        0.f, 0.f, 1.f, 0.f,
-        0.f, 0.f, 0.f, 1.f};
+    const float scale[] = {1.f, 0.f, 0.f, 0.f,
+                           0.f, 1.f, 0.f, 0.f,
+                           0.f, 0.f, 1.f, 0.f,
+                           0.f, 0.f, 0.f, 1.f};
 
-    const GLint matScaleLocation = glGetUniformLocation(m_shader.GetProgram(), "u_scale");
+    const GLint matScaleLocation = glGetUniformLocation(basicProgram, "u_scale");
     glUniformMatrix4fv(matScaleLocation, 1, false, scale);
 
     //
     // MATRICE DE ROTATION
     //
-    const float rot[] = {
-        1.f, 0.f, 0.f, 0.f,
-        0.f, 1.f, 0.f, 0.f,
-        0.f, 0.f, 1.f, 0.f,
-        0.f, 0.f, 0.f, 1.f};
+    const float rot[] = {1.f, 0.f, 0.f, 0.f,
+                         0.f, 1.f, 0.f, 0.f,
+                         0.f, 0.f, 1.f, 0.f,
+                         0.f, 0.f, 0.f, 1.f};
 
-    const GLint matRotLocation = glGetUniformLocation(m_shader.GetProgram(), "u_rotation");
+    const GLint matRotLocation = glGetUniformLocation(basicProgram, "u_rotation");
     glUniformMatrix4fv(matRotLocation, 1, false, rot);
 
     //
     // MATRICE DE TRANSLATION
     //
-    const float translation[] = {
-        1.f, 0.f, 0.f, 0.f,
-        0.f, 1.f, 0.f, 0.f,
-        0.f, 0.f, 1.f, 0.f,
-        0.f, 0.f, -15.f, 1.f};
-    const GLint matTranslationLocation = glGetUniformLocation(m_shader.GetProgram(), "u_translation");
+    const float translation[] = {1.f, 0.f, 0.f, 0.f,
+                                 0.f, 1.f, 0.f, 0.f,
+                                 0.f, 0.f, 1.f, 0.f,
+                                 0.f, 0.f, -15.f, 1.f};
+
+    const GLint matTranslationLocation = glGetUniformLocation(basicProgram, "u_translation");
     glUniformMatrix4fv(matTranslationLocation, 1, false, translation);
-
-    //
-    // MATRICE DE PROJECTION
-    //
-    const float aspectRatio = float(widthWindow) / float(heightWindow);
-    constexpr float nearZ = 0.01f;
-    constexpr float farZ = 1000.f;
-    constexpr float fov = 45.f;
-    constexpr float fov_rad = fov * 3.141592654f / 180.f;
-    const float f = 1.f / tanf(fov_rad / 2.f);
-
-    const float projectionPerspective[] = {
-        f / aspectRatio, 0.f, 0.f, 0.f, // 1ere colonne
-        0.f, f, 0.f, 0.f,
-        0.f, 0.f, -(farZ + nearZ) / (farZ - nearZ), -1.f,
-        0.f, 0.f, -(2.f * farZ * nearZ) / (farZ - nearZ), 0.f // 4eme colonne
-    };
 
     auto world = finalGlobalTransform.Double44();
 
@@ -171,12 +262,9 @@ void Display(GLFWwindow *window)
         static_cast<float>(world[2][0]), static_cast<float>(world[2][1]), static_cast<float>(world[2][2]), static_cast<float>(world[2][3]),
         static_cast<float>(world[3][0]), static_cast<float>(world[3][1]), static_cast<float>(world[3][2]), static_cast<float>(world[3][3])};
 
-    const GLint worldMatlocation = glGetUniformLocation(m_shader.GetProgram(), "u_world");
+    const GLint worldMatlocation = glGetUniformLocation(basicProgram, "u_world");
     glUniformMatrix4fv(worldMatlocation, 1, false, worldMat);
 
-    cam.Matrix(45.0f, 0.1f, 1000.0f, m_shader, "u_projection");
-
-    glBindVertexArray(VAO);
     glDrawArrays(GL_TRIANGLES, 0, vertices.size());
 }
 
@@ -339,52 +427,6 @@ int main()
     GetWorldMat(model);
     GetMaterial(model);
 
-    // TEXTURE
-    glActiveTexture(GL_TEXTURE0);
-    glGenTextures(1, &texture);
-    glBindTexture(GL_TEXTURE_2D, texture);
-
-    // charge et génère la texture
-    int width, height, nrChannels;
-    auto data = stbi_load("data/ironman.fbm/ironman.dff.png", &width, &height, &nrChannels, 0);
-
-    if (data)
-    {
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
-        glGenerateMipmap(GL_TEXTURE_2D);
-    }
-
-    stbi_image_free(data);
-
-    glGenVertexArrays(1, &VAO);
-    glBindVertexArray(VAO);
-
-    glGenBuffers(1, &VBO);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-
-    constexpr int STRIDE = sizeof(Vertex);
-    glBufferData(GL_ARRAY_BUFFER, STRIDE * vertices.size(), vertices.data(), GL_STATIC_DRAW);
-
-    const int POSITION = glGetAttribLocation(m_shader.GetProgram(), "a_position");
-    glEnableVertexAttribArray(POSITION);
-    glVertexAttribPointer(POSITION, 3, GL_FLOAT, false, STRIDE, (void *)offsetof(Vertex, position));
-
-    const int NORMAL = glGetAttribLocation(m_shader.GetProgram(), "a_normal");
-    glEnableVertexAttribArray(NORMAL);
-    glVertexAttribPointer(NORMAL, 3, GL_FLOAT, false, STRIDE, (void *)offsetof(Vertex, normal));
-
-    const int UV = glGetAttribLocation(m_shader.GetProgram(), "a_uv");
-    glEnableVertexAttribArray(UV);
-    glVertexAttribPointer(UV, 2, GL_FLOAT, false, STRIDE, (void *)offsetof(Vertex, uv));
-
-    const int TANGENT = glGetAttribLocation(m_shader.GetProgram(), "a_tangent");
-    glEnableVertexAttribArray(TANGENT);
-    glVertexAttribPointer(TANGENT, 2, GL_FLOAT, false, STRIDE, (void *)offsetof(Vertex, tangent));
-
-    glBindVertexArray(0);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-
     while (!glfwWindowShouldClose(window))
     {
         cam.Inputs(window);
@@ -392,6 +434,7 @@ int main()
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
+
     Shutdown();
     glfwTerminate();
     return 0;
